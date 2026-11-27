@@ -1431,14 +1431,19 @@ const NOTE_BLOCKED='This viewer blocks video inside the deck. Use Open on YouTub
 function clipNote(msg){const v=$('#cbv');v.innerHTML='';const d=document.createElement('p');d.className='cb-note';d.textContent=msg;v.appendChild(d);}
 document.addEventListener('securitypolicyviolation',e=>{const d=e.effectiveDirective||e.violatedDirective||'';
   if(/frame|child/.test(d)&&/youtube/.test(e.blockedURI||'')){EMBED_BLOCKED=true;if(clipOpen)clipNote(NOTE_BLOCKED);}});
+const mmss=x=>Math.floor(x/60)+':'+String(x%60).padStart(2,'0');
 function openClip(a,note){const k=a.dataset.clip,box=$('#clipbox'),v=$('#cbv');v.innerHTML='';
   if(note)clipNote(note);
-  else if(CLIPLOCAL[k]){const el=document.createElement('video');el.src='clips/'+k+'.mp4';el.controls=true;el.autoplay=true;el.playsInline=true;v.appendChild(el);}
+  else if(CLIPLOCAL[k]){const el=document.createElement('video'),st=+a.dataset.start||0,en=+a.dataset.end||0;el.src='clips/'+k+'.mp4';el.controls=true;el.playsInline=true;v.appendChild(el);
+    /* a full-length copy plays only the chosen moments; a copy already cut to the scene plays whole */
+    el.addEventListener('loadedmetadata',()=>{const cut=en>0&&el.duration>=en-.5;el._end=cut?en:0;if(cut){if(st>0)el.currentTime=st;$('#cbt').textContent+=', '+mmss(st)+'–'+mmss(en);}
+      const pr=el.play();if(pr&&pr.catch)pr.catch(()=>{});},{once:true});
+    el.addEventListener('timeupdate',()=>{if(el._end&&el.currentTime>=el._end){el.pause();el.currentTime=el._end;}});}
   else{const f=document.createElement('iframe');const st=parseInt(a.dataset.start,10),en=parseInt(a.dataset.end,10);
     f.src='https://www.youtube-nocookie.com/embed/'+ytId(a.href)+'?autoplay=1&rel=0&playsinline=1'+(st>0?'&start='+st:'')+(en>0?'&end='+en:'');
     f.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';f.allowFullscreen=true;f.referrerPolicy='strict-origin-when-cross-origin';
     f.title=a.textContent;v.appendChild(f);}
-  const li=a.closest('li'),nm=li&&li.querySelector('b'),mmss=x=>Math.floor(x/60)+':'+String(x%60).padStart(2,'0'),s0=+a.dataset.start||0,s1=+a.dataset.end||0;
+  const li=a.closest('li'),nm=li&&li.querySelector('b'),s0=+a.dataset.start||0,s1=+a.dataset.end||0;
   $('#cbt').textContent=(nm?nm.textContent+' power: ':'')+a.textContent+(s1&&!CLIPLOCAL[k]?', '+mmss(s0)+'–'+mmss(s1):'');
   $('#cbo').href=a.href;box.hidden=false;clipOpen=true;MUS.duck=0;musApply(.25);}
 function closeClip(){if(!clipOpen)return;const el=$('#cbv').firstChild;if(el&&el.pause)el.pause();$('#cbv').innerHTML='';
