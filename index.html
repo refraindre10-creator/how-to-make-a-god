@@ -788,9 +788,9 @@ body.blackout #black{opacity:1}
     <h2 class="hl">By the end, Paul draws on five sources of power.</h2>
     <p class="reinf">Each source enables the next, so they reinforce one another rather than add up.</p>
     <ol class="src5">
-      <li class="f" data-f="1"><span class="rn">I</span><span class="nm"><b>Expert</b><a class="clip" data-clip="expert" href="https://www.youtube.com/watch?v=SEzb0rNhNSM" target="_blank" rel="noopener">riding the sandworm</a></span><span class="tx">combat skill, Bene Gesserit training, prescience, the Fremen way<em>→ credibility and status</em></span></li>
-      <li class="f" data-f="2"><span class="rn">II</span><span class="nm"><b>Symbolic</b><a class="clip" data-clip="symbolic" href="https://www.youtube.com/watch?v=ofRdPtkUmJ4" target="_blank" rel="noopener">his address to the Fremen</a></span><span class="tx">Muad’Dib, the Lisan al-Gaib<em>→ followers with extraordinary loyalty</em></span></li>
-      <li class="f" data-f="3"><span class="rn">III</span><span class="nm"><b>Coercive</b><a class="clip" data-clip="coercive" href="https://www.youtube.com/watch?v=rL2k3EkyNxY" target="_blank" rel="noopener">the attack on the Emperor</a></span><span class="tx">the Fremen fighting force and the family atomics<em>→ the means to defeat the Emperor’s army</em></span></li>
+      <li class="f" data-f="1"><span class="rn">I</span><span class="nm"><b>Expert</b><a class="clip" data-clip="expert" data-start="328" data-end="370" href="https://www.youtube.com/watch?v=SEzb0rNhNSM&amp;t=328s" target="_blank" rel="noopener">riding the sandworm</a></span><span class="tx">combat skill, Bene Gesserit training, prescience, the Fremen way<em>→ credibility and status</em></span></li>
+      <li class="f" data-f="2"><span class="rn">II</span><span class="nm"><b>Symbolic</b><a class="clip" data-clip="symbolic" data-start="164" data-end="190" href="https://www.youtube.com/watch?v=ofRdPtkUmJ4&amp;t=164s" target="_blank" rel="noopener">his address to the Fremen</a></span><span class="tx">Muad’Dib, the Lisan al-Gaib<em>→ followers with extraordinary loyalty</em></span></li>
+      <li class="f" data-f="3"><span class="rn">III</span><span class="nm"><b>Coercive</b><a class="clip" data-clip="coercive" data-start="15" data-end="68" href="https://www.youtube.com/watch?v=rL2k3EkyNxY&amp;t=15s" target="_blank" rel="noopener">the attack on the Emperor</a></span><span class="tx">the Fremen fighting force and the family atomics<em>→ the means to defeat the Emperor’s army</em></span></li>
       <li class="f" data-f="4"><span class="rn">IV</span><span class="nm"><b>Resource</b><i>the spice the empire needs</i></span><span class="tx">control of Arrakis and the threat to the spice<em>→ leverage over the whole imperial system</em></span></li>
       <li class="f" data-f="5"><span class="rn">V</span><span class="nm"><b>Legitimate</b><a class="clip" data-clip="legitimate" href="https://www.youtube.com/watch?v=5O3wrqKCvZc" target="_blank" rel="noopener">the Emperor’s surrender</a></span><span class="tx">Atreides heritage, the defeat of Shaddam, the claim to Irulan<em>→ a formal claim to the throne</em></span></li>
     </ol>
@@ -1434,10 +1434,12 @@ document.addEventListener('securitypolicyviolation',e=>{const d=e.effectiveDirec
 function openClip(a,note){const k=a.dataset.clip,box=$('#clipbox'),v=$('#cbv');v.innerHTML='';
   if(note)clipNote(note);
   else if(CLIPLOCAL[k]){const el=document.createElement('video');el.src='clips/'+k+'.mp4';el.controls=true;el.autoplay=true;el.playsInline=true;v.appendChild(el);}
-  else{const f=document.createElement('iframe');f.src='https://www.youtube-nocookie.com/embed/'+ytId(a.href)+'?autoplay=1&rel=0&playsinline=1';
+  else{const f=document.createElement('iframe');const st=parseInt(a.dataset.start,10),en=parseInt(a.dataset.end,10);
+    f.src='https://www.youtube-nocookie.com/embed/'+ytId(a.href)+'?autoplay=1&rel=0&playsinline=1'+(st>0?'&start='+st:'')+(en>0?'&end='+en:'');
     f.allow='autoplay; encrypted-media; picture-in-picture; fullscreen';f.allowFullscreen=true;f.referrerPolicy='strict-origin-when-cross-origin';
     f.title=a.textContent;v.appendChild(f);}
-  const li=a.closest('li'),nm=li&&li.querySelector('b');$('#cbt').textContent=(nm?nm.textContent+' power: ':'')+a.textContent;
+  const li=a.closest('li'),nm=li&&li.querySelector('b'),mmss=x=>Math.floor(x/60)+':'+String(x%60).padStart(2,'0'),s0=+a.dataset.start||0,s1=+a.dataset.end||0;
+  $('#cbt').textContent=(nm?nm.textContent+' power: ':'')+a.textContent+(s1&&!CLIPLOCAL[k]?', '+mmss(s0)+'–'+mmss(s1):'');
   $('#cbo').href=a.href;box.hidden=false;clipOpen=true;MUS.duck=0;musApply(.25);}
 function closeClip(){if(!clipOpen)return;const el=$('#cbv').firstChild;if(el&&el.pause)el.pause();$('#cbv').innerHTML='';
   $('#clipbox').hidden=true;clipOpen=false;MUS.duck=1;musApply(1.4);if(document.activeElement)document.activeElement.blur();}
