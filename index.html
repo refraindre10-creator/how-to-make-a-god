@@ -1692,9 +1692,46 @@ const NA=SMALL?56:96, MAXPF=4*8+1;
 const SA=new Float32Array(NA),CA=new Float32Array(NA),LB=new Float32Array(NA),RP=new Float32Array(NA);
 for(let j=0;j<NA;j++){const t=j/NA*Math.PI*2;SA[j]=Math.sin(t);CA[j]=Math.cos(t);RP[j]=t;
   LB[j]=lobe(t);}
+/* wind ripples: broken, sinuous lines across each terrace's slope */
+const RIPN=6,RIP=[],RIPM=new Uint8Array(4*RIPN*NA);
+for(let k=0;k<4;k++){const R=[];
+  for(let r=0;r<RIPN;r++){const q=new Float32Array(NA+1),b=(r+1.5)/7,f1=2+((rnd()*3)|0),f2=5+((rnd()*4)|0),p1=rnd()*6.28,p2=rnd()*6.28,a1=.028+rnd()*.012,a2=.008+rnd()*.006;
+    for(let j=0;j<=NA;j++){const t=j/NA*Math.PI*2;q[j]=b+a1*Math.sin(f1*t+p1)+a2*Math.sin(f2*t+p2);}
+    const m=2+((rnd()*3)|0),ph=rnd()*6.28,th=-.35-rnd()*.3;
+    R.push(q);for(let j=0;j<NA;j++)RIPM[(k*RIPN+r)*NA+j]=Math.sin(j/NA*Math.PI*2*m+ph)>th?1:0;}
+  RIP.push(R);}
 const PFR=new Float32Array(MAXPF),PFY=new Float32Array(MAXPF),PFK=new Int8Array(MAXPF),PFRIM=new Uint8Array(MAXPF);let PFN=0,TOP_Y=GROUND;
 const NV=MAXPF*NA,VX=new Float32Array(NV),VY=new Float32Array(NV),VZ=new Float32Array(NV),SX=new Float32Array(NV),SY=new Float32Array(NV),SZ=new Float32Array(NV),SOK=new Uint8Array(NV);
-const MAXI=NV*2+64,ID=new Float32Array(MAXI),IK=new Uint8Array(MAXI),IA=new Int32Array(MAXI),IC=new Int16Array(MAXI),IORD=new Int32Array(MAXI);
+const MAXI=NV*5+256,ID=new Float32Array(MAXI),IK=new Uint8Array(MAXI),IA=new Int32Array(MAXI),IC=new Int16Array(MAXI),IORD=new Int32Array(MAXI),
+  IAL=new Float32Array(MAXI),RT0=new Float32Array(MAXI),RT1=new Float32Array(MAXI);
+/* Sand and metal shading. Each dune face is lit once (a warm key from the low sun, a cool fill
+   from the sky, a glowing rim where the sun is behind it) and drawn with its colour blended
+   into its neighbours, so the dune reads as smooth sand instead of facets. */
+const FC=new Float32Array(NV*3),FS=new Float32Array(NV*3),FL=new Float32Array(NV),FNY=new Float32Array(NV),FOK=new Uint8Array(NV),FVIS=new Uint8Array(NV);
+const SAND=[.98,.79,.57],KEY=[255,192,128],SKYF=[110,100,130],AMB=[64,47,38],RIMC=[255,170,96];
+function sandRGB(nx,ny,nz,vx,vy,vz,f){
+  const lam=Math.max(0,nx*SUN[0]+ny*SUN[1]+nz*SUN[2]),up=Math.max(0,-ny),ndv=Math.max(0,nx*vx+ny*vy+nz*vz),
+    back=Math.max(0,-(vx*SUN[0]+vy*SUN[1]+vz*SUN[2])),rim=Math.pow(1-ndv,2.4)*(.3+.7*back),o=f*3;
+  for(let c=0;c<3;c++)FC[o+c]=Math.min(255,SAND[c]*(KEY[c]*lam*1.05+SKYF[c]*up*.7+AMB[c])+RIMC[c]*rim*.6);
+  return lam;}
+const C_KEY=[255,196,134],SUNH=(()=>{const l=Math.hypot(SUN[0],SUN[2])||1;return [SUN[0]/l,SUN[2]/l];})();
+function envUp(u){if(u>=0){const t=Math.pow(u,.5);return [lerp(255,74,t),lerp(176,30,t),lerp(104,20,t)];}
+  const t=Math.min(1,-u*2.4);return [lerp(168,40,t),lerp(98,24,t),lerp(54,15,t)];}
+function shadeFace(mat,nx,ny,nz,vx,vy,vz,lit){
+  const lam=Math.max(0,nx*SUN[0]+ny*SUN[1]+nz*SUN[2]),ndv=Math.max(0,nx*vx+ny*vy+nz*vz),up=Math.max(0,-ny);
+  const rx=2*ndv*nx-vx,ry=2*ndv*ny-vy,rz=2*ndv*nz-vz,spec=Math.pow(Math.max(0,rx*SUN[0]+ry*SUN[1]+rz*SUN[2]),40);
+  const back=Math.max(0,-(vx*SUN[0]+vy*SUN[1]+vz*SUN[2])),rim=Math.pow(1-ndv,3)*(.3+.7*back),rh=Math.hypot(rx,rz)||1,sw=Math.max(0,(rx*SUNH[0]+rz*SUNH[1])/rh),e=envUp(-ry).map(x=>x*(.42+.78*sw*sw));
+  const metal=(t,ks,kd,sp)=>[0,1,2].map(i=>t[i]*(e[i]*ks+C_KEY[i]*lam*kd+58)+[255,244,222][i]*spec*sp+[255,186,110][i]*rim*.5);
+  let c;
+  if(mat==='gold')c=metal([1,.82,.5],1.2,.5,1.6);
+  else if(mat==='gilt')c=metal([.98,.78,.5],.95,.6,1.1);
+  else if(mat==='silver')c=metal([.86,.9,1],.9,.3,1.4);
+  else if(mat==='bronze')c=metal([.7,.5,.34],.6,.3,.6);
+  else if(mat==='cloth'){const al=[.66,.11,.09];c=[0,1,2].map(i=>al[i]*(C_KEY[i]*lam*1.1+[96,70,64][i]+[90,80,100][i]*up*.5)+[255,120,90][i]*rim*.45+[255,200,170][i]*spec*.12);}
+  else if(mat==='plinth'){const al=[.66,.62,.62];c=[0,1,2].map(i=>al[i]*(C_KEY[i]*lam*.9+[70,62,66][i]+[100,104,130][i]*up*.5)+[200,220,240][i]*rim*.25);}
+  else{const st=[0,1,2].map(i=>[.6,.54,.5][i]*(C_KEY[i]*lam*.95+[64,54,52][i]+[96,92,112][i]*up*.5)+[255,190,120][i]*rim*.35),gi=metal([.98,.78,.5],.95,.6,1.1);
+    c=[0,1,2].map(i=>lerp(st[i],gi[i],lit));}
+  return `rgb(${Math.min(255,c[0])|0},${Math.min(255,c[1])|0},${Math.min(255,c[2])|0})`;}
 const PALS=[[[56,32,20],[240,194,132]],[[28,21,25],[168,132,102]],[[46,32,28],[214,170,112]]].map(([a,b])=>{const o=[];
   for(let l=0;l<64;l++){const c=mix(a,b,Math.pow(l/63,.9));o.push(`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`);}return o;});
 function buildProfile(){PFN=0;let y=GROUND;
@@ -1780,38 +1817,57 @@ function drawMonument(ctx){
     for(let i=0;i<PFN;i++){const r=PFR[i],k=PFK[i],amp=k>=0?TERR[k].amp:0,rim=PFRIM[i];
       for(let j=0;j<NA;j++){const v=i*NA+j,rr=r*(1+amp*LB[j]),x=rr*SA[j],y=PFY[i]+(rim?16*Math.sin(4*RP[j]+k*1.3):0),z=rr*CA[j];
         VX[v]=x;VY[v]=y;VZ[v]=z;if(proj(x,y,z)){SX[v]=PT[0];SY[v]=PT[1];SZ[v]=PT[2];SOK[v]=1;}else SOK[v]=0;}}
-    for(let i=0;i<PFN-1;i++)for(let j=0;j<NA;j++){const j1=(j+1)%NA,a=i*NA+j,b=i*NA+j1,c=(i+1)*NA+j1,d=(i+1)*NA+j;
+    for(let i=0;i<PFN-1;i++)for(let j=0;j<NA;j++){const f=i*NA+j,j1=(j+1)%NA,a=f,b=i*NA+j1,c=(i+1)*NA+j1,d=(i+1)*NA+j;FOK[f]=0;
       if(!(SOK[a]&&SOK[b]&&SOK[c]&&SOK[d]))continue;
       const e1x=VX[b]-VX[a],e1y=VY[b]-VY[a],e1z=VZ[b]-VZ[a],e2x=VX[d]-VX[a],e2y=VY[d]-VY[a],e2z=VZ[d]-VZ[a];
       let nx=e1y*e2z-e1z*e2y,ny=e1z*e2x-e1x*e2z,nz=e1x*e2y-e1y*e2x;const nl=Math.hypot(nx,ny,nz)||1;nx/=nl;ny/=nl;nz/=nl;
       const mx=(VX[a]+VX[c])/2,my=(VY[a]+VY[c])/2,mz=(VZ[a]+VZ[c])/2;
       if(nx*mx-ny*600+nz*mz<0){nx=-nx;ny=-ny;nz=-nz;}
-      if(nx*(ex-mx)+ny*(ey-my)+nz*(ez-mz)<=0)continue;
-      const lam=Math.max(0,nx*SUN[0]+ny*SUN[1]+nz*SUN[2]);
-      let br=.21+.17*Math.max(0,-ny)+.85*lam;
-      const dist=Math.hypot(ex-mx,ey-my,ez-mz),ff=clamp((dist-8000)/16000,0,.5);br=br*(1-ff)+.2*ff;
-      ID[n]=(SZ[a]+SZ[b]+SZ[c]+SZ[d])/4;IK[n]=0;IA[n]=a;IC[n]=clamp(Math.round(br*63),0,63);n++;
-      if(PFRIM[i+1]&&ny>-.5){ID[n]=ID[n-1]+1;IK[n]=1;IA[n]=d;IC[n]=j1;n++;}}
+      let vx=ex-mx,vy=ey-my,vz=ez-mz;const dist=Math.hypot(vx,vy,vz)||1;vx/=dist;vy/=dist;vz/=dist;
+      FL[f]=sandRGB(nx,ny,nz,vx,vy,vz,f);FNY[f]=ny;FOK[f]=1;FVIS[f]=nx*vx+ny*vy+nz*vz>0?1:0;
+      {const kk=PFK[i];let ao=1;if(kk>=0&&PFK[i+1]===kk){const u=(i-8*kk+.5)/7,s0=clamp(u/.42,0,1);ao=.76+.24*s0*s0*(3-2*s0);}else if(kk>=0)ao=.86;
+        if(ao<1){const o=f*3;FC[o]*=ao;FC[o+1]*=ao;FC[o+2]*=ao;}}
+      const ff=clamp((dist-8000)/16000,0,.5);if(ff>0){const o=f*3;FC[o]=lerp(FC[o],120,ff);FC[o+1]=lerp(FC[o+1],72,ff);FC[o+2]=lerp(FC[o+2],44,ff);}}
+    for(let i=0;i<PFN-1;i++){const k=PFK[i],slope=k>=0&&PFK[i+1]===k,dn=slope&&i>0&&PFK[i-1]===k,upn=slope&&i+2<PFN&&PFK[i+2]===k;
+      for(let j=0;j<NA;j++){const f=i*NA+j;if(!FOK[f])continue;const o=f*3;let w=4,r=FC[o]*4,g=FC[o+1]*4,b=FC[o+2]*4;
+        const add=(h,wt)=>{if(FOK[h]){const q=h*3;r+=FC[q]*wt;g+=FC[q+1]*wt;b+=FC[q+2]*wt;w+=wt;}};
+        add(i*NA+(j+NA-1)%NA,2);add(i*NA+(j+1)%NA,2);if(dn)add(f-NA,1.5);if(upn)add(f+NA,1.5);
+        FS[o]=r/w;FS[o+1]=g/w;FS[o+2]=b/w;}}
+    for(let i=0;i<PFN-1;i++){const k=PFK[i],slope=k>=0&&PFK[i+1]===k,u0=(i-8*k)/7;
+      for(let j=0;j<NA;j++){const f=i*NA+j;if(!FOK[f]||!FVIS[f])continue;
+        const j1=(j+1)%NA,a=f,b=i*NA+j1,c=(i+1)*NA+j1,d=(i+1)*NA+j,dz=(SZ[a]+SZ[b]+SZ[c]+SZ[d])/4;
+        ID[n]=dz;IK[n]=0;IA[n]=f;n++;
+        if(slope&&!SMALL){const R=RIP[k];
+          for(let r=0;r<RIPN;r++){if(!RIPM[(k*RIPN+r)*NA+j])continue;const q=R[r],tL=(q[j]-u0)*7,tR=(q[j+1]-u0)*7;
+            if(tL<0||tL>1||tR<0||tR>1)continue;ID[n]=dz+.4;IK[n]=3;IA[n]=f;RT0[n]=tL;RT1[n]=tR;n++;}}
+        if(PFRIM[i+1]&&FNY[f]>-.5){ID[n]=dz+1;IK[n]=1;IA[n]=d;IC[n]=j1;IAL[n]=.12+.55*FL[f];n++;}}}
   }
   const lit=WS.lit,tf=[];
   for(let f=0;f<TH.F.length;f++){const F=TH.F[f],mx=F.m[0],my=F.m[1]+TOP_Y,mz=F.m[2];let nx=F.n[0],ny=F.n[1],nz=F.n[2];
     if(nx*(ex-mx)+ny*(ey-my)+nz*(ez-mz)<=0){if(!F.two)continue;nx=-nx;ny=-ny;nz=-nz;}
     let ok=true,dz=0;const pts=[];for(const q of F.w){if(!proj(q[0],q[1]+TOP_Y,q[2])){ok=false;break;}pts.push(PT[0],PT[1]);dz+=PT[2];}
     if(!ok)continue;
-    const lam=Math.max(0,nx*SUN[0]+ny*SUN[1]+nz*SUN[2]),br=(F.mat==='cloth'?.3:.24)+.2*Math.max(0,-ny)+.8*lam;
-    tf.push({pts,mat:F.mat,a:F.a,l:clamp(Math.round(br*63),0,63)});ID[n]=dz/F.w.length+6;IK[n]=2;IA[n]=tf.length-1;n++;}
+    let vx=ex-mx,vy=ey-my,vz=ez-mz;const vl=Math.hypot(vx,vy,vz)||1;vx/=vl;vy/=vl;vz/=vl;
+    tf.push({pts,mat:F.mat,a:F.a,col:shadeFace(F.mat,nx,ny,nz,vx,vy,vz,lit)});ID[n]=dz/F.w.length+6;IK[n]=2;IA[n]=tf.length-1;n++;}
   for(let i=0;i<n;i++)IORD[i]=i;
   const ord=IORD.subarray(0,n);ord.sort((p,q)=>ID[p]-ID[q]);
   const lw=.9*DPR,crest=rgba([250,232,196],.55),edge=rgba(mix(C_SAND,C_GOLD,lit),.34+.55*lit),goldEdge=rgba([255,236,178],.7);
   ctx.lineJoin='round';
   for(let o=0;o<n;o++){const it=ord[o],k=IK[it];
-    if(k===0){const a=IA[it],i=(a/NA)|0,j=a%NA,j1=(j+1)%NA,b=i*NA+j1,c=(i+1)*NA+j1,d=(i+1)*NA+j,col=PALS[0][IC[it]];
+    if(k===0){const f=IA[it],i=(f/NA)|0,j=f%NA,j1=(j+1)%NA,jm=(j+NA-1)%NA,a=f,b=i*NA+j1,c=(i+1)*NA+j1,d=(i+1)*NA+j,fl=i*NA+jm,fr=i*NA+j1;
+      const o=f*3,col=`rgb(${FS[o]|0},${FS[o+1]|0},${FS[o+2]|0})`;
       ctx.beginPath();ctx.moveTo(SX[a],SY[a]);ctx.lineTo(SX[b],SY[b]);ctx.lineTo(SX[c],SY[c]);ctx.lineTo(SX[d],SY[d]);ctx.closePath();
       ctx.fillStyle=col;ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke();}
-    else if(k===1){const d=IA[it],b=((d/NA)|0)*NA+IC[it];ctx.strokeStyle=crest;ctx.lineWidth=1.3*DPR;ctx.beginPath();ctx.moveTo(SX[d],SY[d]);ctx.lineTo(SX[b],SY[b]);ctx.stroke();}
-    else{const T=tf[IA[it]],pts=T.pts,col=matRGB(T.mat,T.l,lit);ctx.beginPath();ctx.moveTo(pts[0],pts[1]);for(let q=2;q<pts.length;q+=2)ctx.lineTo(pts[q],pts[q+1]);ctx.closePath();
+    else if(k===3){const f=IA[it],i=(f/NA)|0,j=f%NA,j1=(j+1)%NA,a=f,b=i*NA+j1,c=(i+1)*NA+j1,d=(i+1)*NA+j,tL=RT0[it],tR=RT1[it],lam=FL[f];
+      const x0=SX[a]+(SX[d]-SX[a])*tL,y0=SY[a]+(SY[d]-SY[a])*tL,x1=SX[b]+(SX[c]-SX[b])*tR,y1=SY[b]+(SY[c]-SY[b])*tR;
+      ctx.lineWidth=.9*DPR;ctx.strokeStyle=lam>.08?`rgba(255,230,186,${(.05+.36*lam).toFixed(3)})`:'rgba(62,36,22,.13)';ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();}
+    else if(k===1){const d=IA[it],b=((d/NA)|0)*NA+IC[it];ctx.strokeStyle=`rgba(255,232,192,${IAL[it].toFixed(3)})`;ctx.lineWidth=1.2*DPR;ctx.beginPath();ctx.moveTo(SX[d],SY[d]);ctx.lineTo(SX[b],SY[b]);ctx.stroke();}
+    else{const T=tf[IA[it]],pts=T.pts,col=T.col;ctx.beginPath();ctx.moveTo(pts[0],pts[1]);for(let q=2;q<pts.length;q+=2)ctx.lineTo(pts[q],pts[q+1]);ctx.closePath();
       ctx.fillStyle=col;ctx.fill();
-      if(T.mat==='stone'){ctx.strokeStyle=edge;ctx.lineWidth=1.3*DPR;}else if(T.mat==='plinth'){ctx.strokeStyle=rgba(C_ICE,.7*T.a);ctx.lineWidth=1.5*DPR;}else if(T.mat==='gold'){ctx.strokeStyle=goldEdge;ctx.lineWidth=1.1*DPR;}else if(T.mat==='silver'){ctx.strokeStyle='rgba(236,242,252,.5)';ctx.lineWidth=1.1*DPR;}else{ctx.strokeStyle=col;ctx.lineWidth=lw;}
+      if(T.mat==='plinth'){ctx.strokeStyle=rgba(C_ICE,.7*T.a);ctx.lineWidth=1.5*DPR;}
+      else if(T.mat==='gold'||T.mat==='silver'){ctx.strokeStyle=T.mat==='gold'?'rgba(255,238,196,.26)':'rgba(240,244,252,.24)';ctx.lineWidth=.8*DPR;}
+      else if(T.mat==='stone'){ctx.strokeStyle=`rgba(255,230,178,${(.05+.14*lit).toFixed(3)})`;ctx.lineWidth=.8*DPR;}
+      else{ctx.strokeStyle=col;ctx.lineWidth=lw;}
       ctx.stroke();}}
   const te=Math.atan2(ex,ez);let yb=GROUND;ctx.textAlign='center';ctx.textBaseline='middle';
   for(let k=0;k<4;k++){const T=TERR[k],b=WS.build[k];if(b<=.002)break;const H=T.h*easeOut(Math.min(1,b));
@@ -1825,8 +1881,13 @@ function drawMonument(ctx){
     g.addColorStop(0,rgba(C_GOLD,.2*lit));g.addColorStop(1,rgba(C_GOLD,0));
     ctx.globalCompositeOperation='lighter';ctx.fillStyle=g;ctx.fillRect(x-r,y-r,2*r,2*r);ctx.globalCompositeOperation='source-over';}
 }
+function drawContact(ctx){const R=WS.build[0]>.02?TERR[0].rb*1.22*Math.min(1,.4+WS.build[0]):(WS.plinth>.02?820:0);if(!R)return;
+  if(!proj(0,GROUND,0))return;const cx=PT[0],cy=PT[1];let rx=0,ry=0;
+  for(const [x,z] of [[R,0],[-R,0],[0,R],[0,-R],[R*.7,R*.7],[-R*.7,R*.7],[R*.7,-R*.7],[-R*.7,-R*.7]]){if(!proj(x,GROUND,z))return;rx=Math.max(rx,Math.abs(PT[0]-cx));ry=Math.max(ry,Math.abs(PT[1]-cy));}
+  if(rx<2||ry<1)return;ctx.save();ctx.translate(cx,cy);ctx.scale(1,ry/rx);const g=ctx.createRadialGradient(0,0,rx*.35,0,0,rx);
+  g.addColorStop(0,'rgba(12,6,3,.5)');g.addColorStop(.6,'rgba(12,6,3,.22)');g.addColorStop(1,'rgba(12,6,3,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,rx,0,7);ctx.fill();ctx.restore();}
 function drawGround(ctx,now){
-  ctx2=ctx;
+  ctx2=ctx;drawContact(ctx);
   if(WS.war>.01&&WS.warR>60){const al=WS.war*(1-.5*WS.bound),lim=Math.min(WS.warR,11000),t=now/1000;
     for(let k=0;k<8;k++){const r=2450+((t*520+k*1150)%9000);if(r>lim)continue;
       ring3(GROUND-14,r,C_WAR,.62*al*(1-r/11500),1.8*DPR,0,Math.PI*2,2,null,false);}
@@ -1853,7 +1914,8 @@ function drawHouses(ctx,pass,now){const a=WS.houses;if(a<.01)return;const t=RM?0
     const g=ctx.createRadialGradient(0,0,0,0,0,gr);g.addColorStop(0,rgba(col,.42*al));g.addColorStop(1,rgba(col,0));ctx.fillStyle=g;ctx.fillRect(-gr,-gr,gr*2,gr*2);ctx.restore();
     ctx.lineCap='round';ctx.strokeStyle=rgba([222,204,170],.9*al);ctx.lineWidth=Math.max(1.1*DPR,13*q);ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(tx,ty);ctx.stroke();
     const w=Math.max(8*DPR,290*q)*e,h=Math.max(11*DPR,400*q)*e,sw=Math.sin(t*1.7+k*1.3)*.07*w;
-    ctx.fillStyle=rgba(col,.95*al);ctx.beginPath();ctx.moveTo(tx-w/2,ty);ctx.lineTo(tx+w/2,ty);ctx.lineTo(tx+w/2+sw,ty+h);ctx.lineTo(tx+sw*.5,ty+h*.76);ctx.lineTo(tx-w/2+sw,ty+h);ctx.closePath();ctx.fill();
+    const bg2=ctx.createLinearGradient(tx,ty,tx+sw,ty+h);bg2.addColorStop(0,rgba(mix(col,[255,246,226],.28),.97*al));bg2.addColorStop(.55,rgba(col,.95*al));bg2.addColorStop(1,rgba(mix(col,[30,16,10],.42),.95*al));
+    ctx.fillStyle=bg2;ctx.beginPath();ctx.moveTo(tx-w/2,ty);ctx.lineTo(tx+w/2,ty);ctx.lineTo(tx+w/2+sw,ty+h);ctx.lineTo(tx+sw*.5,ty+h*.76);ctx.lineTo(tx-w/2+sw,ty+h);ctx.closePath();ctx.fill();
     ctx.strokeStyle=rgba([255,240,212],.4*al);ctx.lineWidth=Math.max(.8*DPR,7*q);ctx.stroke();
     ctx.strokeStyle=rgba(C_GOLD,.95*al);ctx.lineWidth=Math.max(1.2*DPR,12*q);ctx.beginPath();ctx.moveTo(tx-w*.64,ty);ctx.lineTo(tx+w*.64,ty);ctx.stroke();
     ctx.fillStyle=rgba(C_GOLD,al);ctx.beginPath();ctx.arc(tx,ty-Math.max(1.6*DPR,18*q),Math.max(1.7*DPR,22*q),0,7);ctx.fill();}}
