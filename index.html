@@ -925,7 +925,8 @@ body.blackout #black{opacity:1}
 <div id="clipbox" role="dialog" aria-modal="true" aria-label="Clip" hidden>
   <div class="cb-in">
     <div class="cb-v" id="cbv"></div>
-    <div class="cb-bar"><p id="cbt"></p><a id="cbo" target="_blank" rel="noopener">Open on YouTube</a><button type="button" id="cbx">Close<kbd>Esc</kbd></button></div>
+    <div class="cb-bar"><p id="cbt"></p><button type="button" id="cbl">Play from my files</button><a id="cbo" target="_blank" rel="noopener">Open on YouTube</a><button type="button" id="cbx">Close<kbd>Esc</kbd></button></div>
+    <input type="file" id="clipfiles" accept="video/*,.mp4,.m4v,.mov,.webm" multiple hidden>
   </div>
 </div>
 <button id="mus" type="button" aria-label="Background music" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18.5a2.5 2.5 0 1 1-2-2.45V5.2l11-2.2v11.5a2.5 2.5 0 1 1-2-2.45V6.2L9 7.6z"/></svg></button>
@@ -943,6 +944,7 @@ body.blackout #black{opacity:1}
     <tr><td><kbd>O</kbd></td><td>Overview of the whole monument; click a slide to jump there</td></tr>
     <tr><td><kbd>1</kbd> to <kbd>9</kbd>, <kbd>0</kbd></td><td>Jump to a slide (0 is slide 10)</td></tr>
     <tr><td><kbd>M</kbd></td><td>Background music on or off; it starts with your first click or key</td></tr>
+    <tr><td><kbd>L</kbd></td><td>Play the clips from video files on this computer: choose expert, symbolic, coercive and legitimate</td></tr>
     <tr><td>Clip links</td><td>Play inside the deck; <kbd>Esc</kbd> or <kbd>→</kbd> closes the clip, <kbd>Space</kbd> pauses a local file</td></tr>
     <tr><td><kbd>F</kbd></td><td>Full screen</td></tr>
     <tr><td><kbd>B</kbd> or <kbd>.</kbd></td><td>Black screen</td></tr>
@@ -1396,6 +1398,7 @@ function onKey(e){
   if(clipOpen){const ck=e.key;
     if(ck==='Escape'||ck==='ArrowRight'||ck==='PageDown'||ck==='ArrowLeft'||ck==='PageUp'){e.preventDefault();closeClip();}
     else if(ck===' '||ck==='k'||ck==='K'){e.preventDefault();const v=$('#cbv video');if(v)v.paused?v.play():v.pause();}
+    else if(ck==='l'||ck==='L'){$('#clipfiles').click();}
     return;}
   const k=e.key;
   if(k==='ArrowRight'||k==='ArrowDown'||k==='PageDown'||k===' '||k==='Enter'){e.preventDefault();next();}
@@ -1411,6 +1414,7 @@ function onKey(e){
   else if(k==='b'||k==='B'||k==='.'){document.body.classList.toggle('blackout');}
   else if(k==='r'||k==='R'){resetTimer();}
   else if(k==='m'||k==='M'){musToggle();}
+  else if(k==='l'||k==='L'){$('#clipfiles').click();}
   else if(k==='Escape'){if(overview)exitOverview();['#help','#setup','#notes'].forEach(id=>$(id).hidden=true);document.body.classList.remove('blackout');}
   else if(/^[0-9]$/.test(k)){const b=k==='0'?10:+k;if(BEATS[b])goTo(BEATS[b].first,0);}
 }
@@ -1418,23 +1422,38 @@ document.addEventListener('keydown',onKey);
 /* ===== clips: play inside the deck =====
    1. a file named clips/<key>.mp4 next to this deck (works offline);
    2. otherwise YouTube's player, which only works when the deck is opened from a web address;
-   3. otherwise the link opens the clip on YouTube in a new tab. */
+   3. otherwise the link opens the clip on YouTube in a new tab.
+   L, or "Play from my files" in the player, lets the presenter pick the clip files on this computer;
+   they play from there and are never uploaded. */
 const CLIPLOCAL={},WEB=/^https?:$/.test(location.protocol);let clipOpen=false;
 document.querySelectorAll('a.clip[data-clip]').forEach(a=>{const k=a.dataset.clip,v=document.createElement('video');
   v.preload='metadata';v.muted=true;
   v.addEventListener('loadedmetadata',()=>{CLIPLOCAL[k]=true;},{once:true});
-  v.addEventListener('error',()=>{CLIPLOCAL[k]=false;},{once:true});
+  v.addEventListener('error',()=>{if(typeof CLIPLOCAL[k]!=='string')CLIPLOCAL[k]=false;},{once:true});
   v.src='clips/'+k+'.mp4';});
 function ytId(h){try{return new URL(h).searchParams.get('v');}catch(e){return null;}}
+let curClip=null;
+const CLIPNAME=[['coercive',/coercive|nuclear|attack/i],['legitimate',/legitimate|emperor|shaddam|conversation|surrender/i],['symbolic',/symbolic|speech|address/i],['expert',/expert|sandworm|worm/i]];
+function loadClipFiles(list){const got=[];
+  for(const f of list){const n=f.name;let key=null;
+    for(const [k] of CLIPNAME)if(new RegExp('^'+k+'\\b','i').test(n)){key=k;break;}
+    if(!key)for(const [k,re] of CLIPNAME)if(re.test(n)&&!got.includes(k)){key=k;break;}
+    if(!key||got.includes(key))continue;
+    if(typeof CLIPLOCAL[key]==='string')URL.revokeObjectURL(CLIPLOCAL[key]);
+    CLIPLOCAL[key]=URL.createObjectURL(f);got.push(key);}
+  toast(got.length?(got.length===4?'All four clips will play from this computer':'Playing from this computer: '+got.join(', ')):'No clip files recognised. Name them expert, symbolic, coercive and legitimate.');
+  if(clipOpen&&curClip&&got.includes(curClip.dataset.clip))openClip(curClip);}
+$('#clipfiles').onchange=e=>{loadClipFiles(e.target.files);e.target.value='';};
+$('#cbl').onclick=()=>$('#clipfiles').click();
 let EMBED_BLOCKED=false;
 const NOTE_BLOCKED='This viewer blocks video inside the deck. Use Open on YouTube, or open the deck in Chrome or Safari from its web address.';
 function clipNote(msg){const v=$('#cbv');v.innerHTML='';const d=document.createElement('p');d.className='cb-note';d.textContent=msg;v.appendChild(d);}
 document.addEventListener('securitypolicyviolation',e=>{const d=e.effectiveDirective||e.violatedDirective||'';
   if(/frame|child/.test(d)&&/youtube/.test(e.blockedURI||'')){EMBED_BLOCKED=true;if(clipOpen)clipNote(NOTE_BLOCKED);}});
 const mmss=x=>Math.floor(x/60)+':'+String(x%60).padStart(2,'0');
-function openClip(a,note){const k=a.dataset.clip,box=$('#clipbox'),v=$('#cbv');v.innerHTML='';
+function openClip(a,note){const k=a.dataset.clip,box=$('#clipbox'),v=$('#cbv');v.innerHTML='';curClip=a;
   if(note)clipNote(note);
-  else if(CLIPLOCAL[k]){const el=document.createElement('video'),st=+a.dataset.start||0,en=+a.dataset.end||0;el.src='clips/'+k+'.mp4';el.controls=true;el.playsInline=true;v.appendChild(el);
+  else if(CLIPLOCAL[k]){const el=document.createElement('video'),st=+a.dataset.start||0,en=+a.dataset.end||0;el.src=typeof CLIPLOCAL[k]==='string'?CLIPLOCAL[k]:'clips/'+k+'.mp4';el.controls=true;el.playsInline=true;v.appendChild(el);
     /* a full-length copy plays only the chosen moments; a copy already cut to the scene plays whole */
     el.addEventListener('loadedmetadata',()=>{const cut=en>0&&el.duration>=en-.5;el._end=cut?en:0;if(cut){if(st>0)el.currentTime=st;$('#cbt').textContent+=', '+mmss(st)+'–'+mmss(en);}
       const pr=el.play();if(pr&&pr.catch)pr.catch(()=>{});},{once:true});
